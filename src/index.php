@@ -30,6 +30,14 @@ function getFilesize($filename) {
     return $size;
 }
 
+function processFile($filename) {
+    $size = getFilesize($filename);
+    if ($size > 1000000) {
+        throw new RuntimeException("File too large");
+    }
+    return $size;
+}
+
 // Validate input exists and is properly set
 if (!isset($_POST["file"]) || !is_string($_POST["file"])) {
     http_response_code(400);
