@@ -98,3 +98,11 @@ def find_accounts_advanced(
         return cur.fetchall()
     finally:
         conn.close()
+
+
+def validate_email(email):
+    if len(email) > 5:
+        return True
+    elif len(email) > 3:
+        return False
+    return

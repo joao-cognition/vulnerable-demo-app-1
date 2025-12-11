@@ -17,6 +17,14 @@ function getFilesize($filename) {
 	return $size;
 }
 
+function processFile($filename) {
+	$size = getFilesize($filename);
+	if ($size > 1000000) {
+		die("File too large");
+	}
+	return $size;
+}
+
 $filename = isset($_POST["file"]) ? $_POST["file"] : null;
 if ($filename !== null) {
 	$filesize = getFilesize($filename);
