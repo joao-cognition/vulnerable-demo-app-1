@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   trigger-devin-fix:
-    name: Trigger Devin to Fix Vulnerabilities
+    name: Trigger Devin Batch Sessions
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -63,13 +63,13 @@ jobs:
           PKG_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "critical" or .severity == "high") | .packageName] | unique | length' snyk-results.json 2>/dev/null || echo "0")
           echo "package_count=$PKG_COUNT" >> "$GITHUB_OUTPUT"
 
-          # Save issues list for the Devin prompt
+          # Save issues list for the Devin prompts
           echo "$ISSUES" > /tmp/vulnerability-list.txt
 
           echo "Found $PKG_COUNT vulnerable packages:"
           cat /tmp/vulnerability-list.txt
 
-      - name: Trigger Devin session to fix all vulnerabilities
+      - name: Trigger Devin batch sessions
         if: steps.scan.outputs.has_issues == 'true'
         env:
           DEVIN_API_TOKEN: ${{ secrets.DEVIN_API_TOKEN }}
@@ -78,8 +78,49 @@ jobs:
         run: |
           ISSUES=$(cat /tmp/vulnerability-list.txt)
 
-          # Build the Devin prompt
-          read -r -d '' PROMPT << PROMPT_DELIM || true
+          # Helper function to create a Devin session
+          create_devin_session() {
+            local title="$1"
+            local prompt="$2"
+            local tags="$3"
+
+            ESCAPED_PROMPT=$(echo "$prompt" | jq -Rs .)
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+              "https://api.devin.ai/v3/organizations/${DEVIN_ORG_ID}/sessions" \
+              -H "Authorization: Bearer ${DEVIN_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"prompt\": ${ESCAPED_PROMPT},
+                \"repos\": [\"joao-cognition/vulnerable-demo-app-1\"],
+                \"title\": \"${title}\",
+                \"tags\": ${tags}
+              }")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
+              SESSION_ID=$(echo "$BODY" | jq -r '.session_id // empty')
+              echo "Session created: $title"
+              echo "  ID:  $SESSION_ID"
+              echo "  URL: $SESSION_URL"
+              echo ""
+              echo "| $title | \`${SESSION_ID}\` | [View](${SESSION_URL}) |" >> /tmp/session-summary.txt
+            else
+              echo "::warning::Failed to create session '$title' (HTTP $HTTP_CODE)"
+              echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+              echo "| $title | FAILED | HTTP $HTTP_CODE |" >> /tmp/session-summary.txt
+            fi
+          }
+
+          echo "" > /tmp/session-summary.txt
+
+          # -----------------------------------------------------------
+          # Session 1: Fix all security vulnerabilities
+          # -----------------------------------------------------------
+          read -r -d '' FIX_PROMPT << PROMPT_DELIM || true
           Fix all critical and high security vulnerabilities found by Snyk in this repository.
 
           Vulnerable packages to fix:
@@ -96,45 +137,79 @@ jobs:
           7. In the PR description, list each vulnerability that was fixed with before/after versions
           PROMPT_DELIM
 
-          # Escape prompt for JSON payload
-          ESCAPED_PROMPT=$(echo "$PROMPT" | jq -Rs .)
+          create_devin_session \
+            "Auto-fix: ${PKG_COUNT} critical security vulnerabilities" \
+            "$FIX_PROMPT" \
+            '["auto-fix", "snyk", "security"]'
 
-          echo "Triggering Devin session to fix $PKG_COUNT vulnerable packages..."
+          # -----------------------------------------------------------
+          # Session 2: Update or create documentation
+          # -----------------------------------------------------------
+          read -r -d '' DOCS_PROMPT << PROMPT_DELIM || true
+          Review and update the documentation for this repository. The following security vulnerabilities were recently found by Snyk:
 
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://api.devin.ai/v3/organizations/${DEVIN_ORG_ID}/sessions" \
-            -H "Authorization: Bearer ${DEVIN_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"prompt\": ${ESCAPED_PROMPT},
-              \"repos\": [\"joao-cognition/vulnerable-demo-app-1\"],
-              \"title\": \"Auto-fix: ${PKG_COUNT} critical security vulnerabilities\",
-              \"tags\": [\"auto-fix\", \"snyk\", \"security\"]
-            }")
+          ${ISSUES}
 
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
+          Instructions:
+          1. Update README.md with proper project documentation including:
+             - Project description and purpose
+             - Setup and installation instructions
+             - Environment variables and configuration
+             - Security scanning information (Snyk CI pipeline is configured)
+          2. Add a SECURITY.md file if one does not exist, documenting:
+             - How to report security vulnerabilities
+             - The automated Snyk scanning process
+             - Dependency update policy
+          3. Add a CONTRIBUTING.md file if one does not exist with contribution guidelines
+          4. Ensure all documentation reflects the current state of the project
+          5. Create a single PR titled: 'docs: update repository documentation and security policy'
+          PROMPT_DELIM
 
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
-            SESSION_ID=$(echo "$BODY" | jq -r '.session_id // empty')
-            echo "Devin session created successfully!"
-            echo "Session ID: $SESSION_ID"
-            echo "Session URL: $SESSION_URL"
+          create_devin_session \
+            "Docs: update repository documentation" \
+            "$DOCS_PROMPT" \
+            '["auto-fix", "documentation", "security"]'
 
-            echo "## Devin Auto-Fix Triggered" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "A Devin session has been created to fix **${PKG_COUNT}** vulnerable packages." >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Session ID:** \`${SESSION_ID}\`" >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Session URL:** [View Devin Session](${SESSION_URL})" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### Vulnerabilities Being Fixed" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            cat /tmp/vulnerability-list.txt >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::error::Failed to create Devin session (HTTP $HTTP_CODE)"
-            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
-            exit 1
-          fi
+          # -----------------------------------------------------------
+          # Session 3: Add test coverage
+          # -----------------------------------------------------------
+          read -r -d '' TEST_PROMPT << PROMPT_DELIM || true
+          Add test coverage to this repository. Currently the project has minimal or no tests.
+
+          The project is a Node.js application (Express-based) with the following structure:
+          - src/index.php (PHP utility)
+          - src/python/accounts.py (Python database operations)
+          - src/services/pusher.js, sentry.js, wait.ts (JavaScript/TypeScript services)
+          - src/components/RichText.vue (Vue component)
+          - packages/app/ (client-side app)
+
+          Instructions:
+          1. Review the existing codebase and identify testable modules
+          2. Set up a testing framework (Jest is already a devDependency)
+          3. Add unit tests for the JavaScript/TypeScript services in src/services/
+          4. Add tests for any utility functions or business logic
+          5. Update package.json test script to run the new tests (replace the placeholder)
+          6. Ensure all tests pass
+          7. Create a single PR titled: 'test: add unit test coverage for core services'
+          PROMPT_DELIM
+
+          create_devin_session \
+            "Tests: add unit test coverage" \
+            "$TEST_PROMPT" \
+            '["auto-fix", "testing", "coverage"]'
+
+          # -----------------------------------------------------------
+          # Build GitHub Step Summary
+          # -----------------------------------------------------------
+          echo "## Devin Batch Sessions Triggered" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**${PKG_COUNT}** vulnerable packages detected. Three Devin sessions have been created:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Session | ID | Link |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|-----|------|" >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/session-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Vulnerabilities Found" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/vulnerability-list.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
