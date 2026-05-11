@@ -11,7 +11,7 @@ permissions:
 jobs:
   devin-tests:
     name: Devin Test Coverage
-    if: github.actor != 'devin-ai-integration[bot]'
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.pull_request.title, '[pipeline]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -41,7 +41,9 @@ jobs:
           5. Target at least 80% test coverage
           6. Update package.json test script to run the new tests (replace the placeholder)
           7. Ensure all tests pass
-          8. Create a single PR titled: 'test: add unit test coverage for core services'
+          8. Check if there is already an open PR with '[pipeline]' in the title targeting master. If so, push your changes to that PR's branch instead of creating a new one.
+          9. If no such PR exists, create a new PR titled: '[pipeline] test: add unit test coverage for core services'
+          IMPORTANT: The PR title MUST start with '[pipeline]' to prevent triggering additional CI pipelines.
           PROMPT_DELIM
 
           ESCAPED_PROMPT=$(echo "$TEST_PROMPT" | jq -Rs .)

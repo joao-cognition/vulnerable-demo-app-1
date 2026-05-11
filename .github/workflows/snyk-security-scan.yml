@@ -80,7 +80,7 @@ jobs:
   devin-remediation:
     name: Devin Security Remediation
     needs: snyk-scan
-    if: failure() && github.actor != 'devin-ai-integration[bot]'
+    if: failure() && !contains(github.event.pull_request.title, '[pipeline]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -152,8 +152,10 @@ jobs:
           3. Update src/python/requirements.txt if any Python vulnerabilities exist
           4. Run 'npm install' to regenerate the lockfile
           5. Verify the app still starts correctly after updates
-          6. Create a single PR with ALL fixes titled: 'fix: resolve ${PKG_COUNT} critical security vulnerabilities (Snyk)'
-          7. In the PR description, list each vulnerability that was fixed with before/after versions
+          6. Check if there is already an open PR with '[pipeline]' in the title targeting master. If so, push your changes to that PR's branch instead of creating a new one.
+          7. If no such PR exists, create a new PR titled: '[pipeline] fix: resolve ${PKG_COUNT} critical security vulnerabilities'
+          8. In the PR description, list each vulnerability that was fixed with before/after versions
+          IMPORTANT: The PR title MUST start with '[pipeline]' to prevent triggering additional CI pipelines.
           PROMPT_DELIM
 
           ESCAPED_PROMPT=$(echo "$FIX_PROMPT" | jq -Rs .)
