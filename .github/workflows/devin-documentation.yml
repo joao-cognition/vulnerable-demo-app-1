@@ -1,0 +1,63 @@
+name: Documentation Update
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  devin-docs:
+    name: Devin Documentation Update
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Trigger Devin documentation session
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_TOKEN }}
+        run: |
+          read -r -d '' DOCS_PROMPT << PROMPT_DELIM || true
+          Review and update the documentation for this repository (joao-cognition/vulnerable-demo-app-1).
+
+          Instructions:
+          1. Update README.md with proper project documentation including:
+             - Project description and purpose
+             - Setup and installation instructions
+             - Environment variables and configuration
+             - Security scanning information (Snyk CI pipeline is configured)
+          2. Add a SECURITY.md file if one does not exist, documenting:
+             - How to report security vulnerabilities
+             - The automated Snyk scanning process
+             - Dependency update policy
+          3. Add a CONTRIBUTING.md file if one does not exist with contribution guidelines
+          4. Ensure all documentation reflects the current state of the project
+          5. Create a single PR titled: 'docs: update repository documentation and security policy'
+          PROMPT_DELIM
+
+          ESCAPED_PROMPT=$(echo "$DOCS_PROMPT" | jq -Rs .)
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.devin.ai/v1/sessions" \
+            -H "Authorization: Bearer ${DEVIN_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"prompt\": ${ESCAPED_PROMPT}
+            }")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
+            echo "## Devin Documentation Session Created" >> "$GITHUB_STEP_SUMMARY"
+            echo "[View Devin Session]($SESSION_URL)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Failed to create Devin session (HTTP $HTTP_CODE)"
+            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+          fi

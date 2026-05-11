@@ -1,0 +1,66 @@
+name: Test Coverage
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  devin-tests:
+    name: Devin Test Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Trigger Devin test coverage session
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_TOKEN }}
+        run: |
+          read -r -d '' TEST_PROMPT << PROMPT_DELIM || true
+          Add test coverage to this repository (joao-cognition/vulnerable-demo-app-1). Currently the project has minimal or no tests.
+
+          The project is a Node.js application (Express-based) with the following structure:
+          - src/index.php (PHP utility)
+          - src/python/accounts.py (Python database operations)
+          - src/services/pusher.js, sentry.js, wait.ts (JavaScript/TypeScript services)
+          - src/components/RichText.vue (Vue component)
+          - packages/app/ (client-side app)
+
+          Instructions:
+          1. Review the existing codebase and identify testable modules
+          2. Set up a testing framework (Jest is already a devDependency)
+          3. Add unit tests for the JavaScript/TypeScript services in src/services/
+          4. Add tests for any utility functions or business logic
+          5. Target at least 80% test coverage
+          6. Update package.json test script to run the new tests (replace the placeholder)
+          7. Ensure all tests pass
+          8. Create a single PR titled: 'test: add unit test coverage for core services'
+          PROMPT_DELIM
+
+          ESCAPED_PROMPT=$(echo "$TEST_PROMPT" | jq -Rs .)
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.devin.ai/v1/sessions" \
+            -H "Authorization: Bearer ${DEVIN_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"prompt\": ${ESCAPED_PROMPT}
+            }")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
+            echo "## Devin Test Coverage Session Created" >> "$GITHUB_STEP_SUMMARY"
+            echo "[View Devin Session]($SESSION_URL)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Failed to create Devin session (HTTP $HTTP_CODE)"
+            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+          fi
