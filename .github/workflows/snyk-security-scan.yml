@@ -1,0 +1,83 @@
+name: Snyk Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snyk-scan:
+    name: Snyk Vulnerability Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts 2>/dev/null || true
+
+      - name: Install Snyk CLI
+        run: npm install -g snyk
+
+      - name: Run Snyk Open Source Test
+        id: snyk-test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          # Run Snyk test and capture results as JSON
+          snyk test --json --severity-threshold=high > snyk-results.json 2>&1 || true
+
+          # Parse vulnerability counts by severity
+          CRITICAL_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "critical")] | length' snyk-results.json 2>/dev/null || echo "0")
+          HIGH_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "high")] | length' snyk-results.json 2>/dev/null || echo "0")
+          TOTAL_VULN=$(jq '[.vulnerabilities[]?] | length' snyk-results.json 2>/dev/null || echo "0")
+
+          echo "critical_count=$CRITICAL_COUNT" >> "$GITHUB_OUTPUT"
+          echo "high_count=$HIGH_COUNT" >> "$GITHUB_OUTPUT"
+
+          # Build summary report
+          echo "## Snyk Security Scan Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Severity | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Critical | $CRITICAL_COUNT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| High     | $HIGH_COUNT |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total    | $TOTAL_VULN |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # List critical vulnerabilities in summary
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "### Critical Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.vulnerabilities[]? | select(.severity == "critical") | "- **\(.title)** in `\(.packageName)@\(.version)` (fix: `\(.fixedIn[0] // "no fix available")`)"' snyk-results.json 2>/dev/null | sort -u >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Fail the pipeline if critical vulnerabilities are found
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "::error::Found $CRITICAL_COUNT critical vulnerabilities. Pipeline failed."
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Pipeline FAILED: $CRITICAL_COUNT critical vulnerabilities must be resolved.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "No critical vulnerabilities found." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Snyk Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-results
+          path: snyk-results.json
+          retention-days: 30

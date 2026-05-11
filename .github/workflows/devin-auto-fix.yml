@@ -1,0 +1,140 @@
+name: Devin Auto-Fix Security Issues
+
+on:
+  workflow_run:
+    workflows: ["Snyk Security Scan"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-devin-fix:
+    name: Trigger Devin to Fix Vulnerabilities
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: |
+          npm install --ignore-scripts 2>/dev/null || true
+          npm install -g snyk
+
+      - name: Scan and extract critical vulnerabilities
+        id: scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          # Re-run Snyk to get fresh vulnerability data
+          snyk test --json > snyk-results.json 2>&1 || true
+
+          # Extract unique critical/high vulnerability details
+          ISSUES=$(jq -r '
+            [.vulnerabilities[]? |
+              select(.severity == "critical" or .severity == "high") |
+              {title, packageName, version, severity, fixedIn: (.fixedIn[0] // "latest")}
+            ] |
+            unique_by(.packageName) |
+            sort_by(.severity) |
+            reverse |
+            .[] |
+            "[\(.severity | ascii_upcase)] \(.title) in \(.packageName)@\(.version) -> upgrade to \(.fixedIn)"
+          ' snyk-results.json 2>/dev/null)
+
+          if [ -z "$ISSUES" ]; then
+            echo "No critical/high vulnerabilities found. Skipping Devin trigger."
+            echo "has_issues=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_issues=true" >> "$GITHUB_OUTPUT"
+
+          # Count unique affected packages
+          PKG_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "critical" or .severity == "high") | .packageName] | unique | length' snyk-results.json 2>/dev/null || echo "0")
+          echo "package_count=$PKG_COUNT" >> "$GITHUB_OUTPUT"
+
+          # Save issues list for the Devin prompt
+          echo "$ISSUES" > /tmp/vulnerability-list.txt
+
+          echo "Found $PKG_COUNT vulnerable packages:"
+          cat /tmp/vulnerability-list.txt
+
+      - name: Trigger Devin session to fix all vulnerabilities
+        if: steps.scan.outputs.has_issues == 'true'
+        env:
+          DEVIN_API_TOKEN: ${{ secrets.DEVIN_API_TOKEN }}
+          DEVIN_ORG_ID: ${{ secrets.DEVIN_ORG_ID }}
+        run: |
+          ISSUES=$(cat /tmp/vulnerability-list.txt)
+          PKG_COUNT=${{ steps.scan.outputs.package_count }}
+
+          # Build the Devin prompt
+          read -r -d '' PROMPT << PROMPT_DELIM || true
+          Fix all critical and high security vulnerabilities found by Snyk in this repository.
+
+          Vulnerable packages to fix:
+
+          ${ISSUES}
+
+          Instructions:
+          1. Update the vulnerable packages in package.json (root level) to their patched versions
+          2. Update packages/app/package.json if any vulnerable packages exist there
+          3. Update src/python/requirements.txt if any Python vulnerabilities exist
+          4. Run 'npm install' to regenerate the lockfile
+          5. Verify the app still starts correctly after updates
+          6. Create a single PR with ALL fixes titled: 'fix: resolve ${PKG_COUNT} critical security vulnerabilities (Snyk)'
+          7. In the PR description, list each vulnerability that was fixed with before/after versions
+          PROMPT_DELIM
+
+          # Escape prompt for JSON payload
+          ESCAPED_PROMPT=$(echo "$PROMPT" | jq -Rs .)
+
+          echo "Triggering Devin session to fix $PKG_COUNT vulnerable packages..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.devin.ai/v3/organizations/${DEVIN_ORG_ID}/sessions" \
+            -H "Authorization: Bearer ${DEVIN_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"prompt\": ${ESCAPED_PROMPT},
+              \"repos\": [\"joao-cognition/vulnerable-demo-app-1\"],
+              \"title\": \"Auto-fix: ${PKG_COUNT} critical security vulnerabilities\",
+              \"tags\": [\"auto-fix\", \"snyk\", \"security\"]
+            }")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
+            SESSION_ID=$(echo "$BODY" | jq -r '.session_id // empty')
+            echo "Devin session created successfully!"
+            echo "Session ID: $SESSION_ID"
+            echo "Session URL: $SESSION_URL"
+
+            echo "## Devin Auto-Fix Triggered" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "A Devin session has been created to fix **${PKG_COUNT}** vulnerable packages." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Session ID:** \`${SESSION_ID}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Session URL:** [View Devin Session](${SESSION_URL})" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Vulnerabilities Being Fixed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/vulnerability-list.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Failed to create Devin session (HTTP $HTTP_CODE)"
+            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+            exit 1
+          fi
