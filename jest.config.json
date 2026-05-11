@@ -1,0 +1,27 @@
+{
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.tsx?$": "ts-jest",
+    "^.+\\.jsx?$": "babel-jest"
+  },
+  "transformIgnorePatterns": [
+    "/node_modules/(?!node-fetch|pusher-js).+\\.js$"
+  ],
+  "globals": {
+    "ts-jest": {
+      "diagnostics": false
+    }
+  },
+  "collectCoverage": true,
+  "coverageDirectory": "coverage",
+  "coverageReporters": ["text", "lcov", "clover"],
+  "coveragePathIgnorePatterns": [
+    "/node_modules/",
+    "/coverage/"
+  ],
+  "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json"],
+  "testMatch": [
+    "**/__tests__/**/*.(test|spec).(ts|tsx|js|jsx)",
+    "**/*.(test|spec).(ts|tsx|js|jsx)"
+  ]
+}
