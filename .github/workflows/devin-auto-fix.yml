@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows: ["Snyk Security Scan"]
     types: [completed]
-    branches: [master]
 
 permissions:
   contents: read
