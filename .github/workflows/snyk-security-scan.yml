@@ -37,7 +37,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           # Run Snyk test and capture results as JSON
-          snyk test --json --severity-threshold=high > snyk-results.json 2>&1 || true
+          snyk test --json --severity-threshold=high > snyk-results.json 2>/dev/null || true
 
           # Parse vulnerability counts by severity
           CRITICAL_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "critical")] | length' snyk-results.json 2>/dev/null || echo "0")

@@ -36,7 +36,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           # Re-run Snyk to get fresh vulnerability data
-          snyk test --json > snyk-results.json 2>&1 || true
+          snyk test --json > snyk-results.json 2>/dev/null || true
 
           # Extract unique critical/high vulnerability details
           ISSUES=$(jq -r '
