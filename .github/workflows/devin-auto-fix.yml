@@ -71,8 +71,7 @@ jobs:
       - name: Trigger Devin batch sessions
         if: steps.scan.outputs.has_issues == 'true'
         env:
-          DEVIN_API_TOKEN: ${{ secrets.DEVIN_API_TOKEN }}
-          DEVIN_ORG_ID: ${{ secrets.DEVIN_ORG_ID }}
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_TOKEN }}
           PKG_COUNT: ${{ steps.scan.outputs.package_count }}
         run: |
           ISSUES=$(cat /tmp/vulnerability-list.txt)
@@ -81,19 +80,15 @@ jobs:
           create_devin_session() {
             local title="$1"
             local prompt="$2"
-            local tags="$3"
 
             ESCAPED_PROMPT=$(echo "$prompt" | jq -Rs .)
 
             RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-              "https://api.devin.ai/v3/organizations/${DEVIN_ORG_ID}/sessions" \
-              -H "Authorization: Bearer ${DEVIN_API_TOKEN}" \
+              "https://api.devin.ai/v1/sessions" \
+              -H "Authorization: Bearer ${DEVIN_API_KEY}" \
               -H "Content-Type: application/json" \
               -d "{
-                \"prompt\": ${ESCAPED_PROMPT},
-                \"repos\": [\"joao-cognition/vulnerable-demo-app-1\"],
-                \"title\": \"${title}\",
-                \"tags\": ${tags}
+                \"prompt\": ${ESCAPED_PROMPT}
               }")
 
             HTTP_CODE=$(echo "$RESPONSE" | tail -1)
@@ -138,8 +133,7 @@ jobs:
 
           create_devin_session \
             "Auto-fix: ${PKG_COUNT} critical security vulnerabilities" \
-            "$FIX_PROMPT" \
-            '["auto-fix", "snyk", "security"]'
+            "$FIX_PROMPT"
 
           # -----------------------------------------------------------
           # Session 2: Update or create documentation
@@ -166,8 +160,7 @@ jobs:
 
           create_devin_session \
             "Docs: update repository documentation" \
-            "$DOCS_PROMPT" \
-            '["auto-fix", "documentation", "security"]'
+            "$DOCS_PROMPT"
 
           # -----------------------------------------------------------
           # Session 3: Add test coverage
@@ -195,8 +188,7 @@ jobs:
 
           create_devin_session \
             "Tests: add unit test coverage" \
-            "$TEST_PROMPT" \
-            '["auto-fix", "testing", "coverage"]'
+            "$TEST_PROMPT"
 
           # -----------------------------------------------------------
           # Build GitHub Step Summary
