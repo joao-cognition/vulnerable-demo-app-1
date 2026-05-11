@@ -36,18 +36,16 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          # Run Snyk test and capture results as JSON
           snyk test --json --severity-threshold=high > snyk-results.json 2>/dev/null || true
 
-          # Parse vulnerability counts by severity
           CRITICAL_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "critical")] | length' snyk-results.json 2>/dev/null || echo "0")
           HIGH_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "high")] | length' snyk-results.json 2>/dev/null || echo "0")
           TOTAL_VULN=$(jq '[.vulnerabilities[]?] | length' snyk-results.json 2>/dev/null || echo "0")
 
           echo "critical_count=$CRITICAL_COUNT" >> "$GITHUB_OUTPUT"
           echo "high_count=$HIGH_COUNT" >> "$GITHUB_OUTPUT"
+          echo "has_critical=$( [ "$CRITICAL_COUNT" -gt 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
 
-          # Build summary report
           echo "## Snyk Security Scan Results" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Severity | Count |" >> "$GITHUB_STEP_SUMMARY"
@@ -57,17 +55,14 @@ jobs:
           echo "| Total    | $TOTAL_VULN |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          # List critical vulnerabilities in summary
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "### Critical Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
             jq -r '.vulnerabilities[]? | select(.severity == "critical") | "- **\(.title)** in `\(.packageName)@\(.version)` (fix: `\(.fixedIn[0] // "no fix available")`)"' snyk-results.json 2>/dev/null | sort -u >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          # Fail the pipeline if critical vulnerabilities are found
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "::error::Found $CRITICAL_COUNT critical vulnerabilities. Pipeline failed."
-            echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "**Pipeline FAILED: $CRITICAL_COUNT critical vulnerabilities must be resolved.**" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -81,3 +76,107 @@ jobs:
           name: snyk-results
           path: snyk-results.json
           retention-days: 30
+
+  devin-remediation:
+    name: Devin Security Remediation
+    needs: snyk-scan
+    if: failure() && !contains(github.event.pull_request.title, '[pipeline]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Snyk CLI
+        run: |
+          npm install --ignore-scripts 2>/dev/null || true
+          npm install -g snyk
+
+      - name: Extract vulnerabilities
+        id: scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk test --json > snyk-results.json 2>/dev/null || true
+
+          ISSUES=$(jq -r '
+            [.vulnerabilities[]? |
+              select(.severity == "critical" or .severity == "high") |
+              {title, packageName, version, severity, fixedIn: (.fixedIn[0] // "latest")}
+            ] |
+            unique_by(.packageName) |
+            sort_by(.severity) |
+            reverse |
+            .[] |
+            "[\(.severity | ascii_upcase)] \(.title) in \(.packageName)@\(.version) -> upgrade to \(.fixedIn)"
+          ' snyk-results.json 2>/dev/null)
+
+          if [ -z "$ISSUES" ]; then
+            echo "No critical/high vulnerabilities found."
+            echo "has_issues=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_issues=true" >> "$GITHUB_OUTPUT"
+
+          PKG_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "critical" or .severity == "high") | .packageName] | unique | length' snyk-results.json 2>/dev/null || echo "0")
+          echo "package_count=$PKG_COUNT" >> "$GITHUB_OUTPUT"
+          echo "$ISSUES" > /tmp/vulnerability-list.txt
+          echo "Found $PKG_COUNT vulnerable packages:"
+          cat /tmp/vulnerability-list.txt
+
+      - name: Trigger Devin remediation session
+        if: steps.scan.outputs.has_issues == 'true'
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_TOKEN }}
+          PKG_COUNT: ${{ steps.scan.outputs.package_count }}
+        run: |
+          ISSUES=$(cat /tmp/vulnerability-list.txt)
+
+          read -r -d '' FIX_PROMPT << PROMPT_DELIM || true
+          Fix all critical and high security vulnerabilities found by Snyk in this repository.
+
+          Vulnerable packages to fix:
+
+          ${ISSUES}
+
+          Instructions:
+          1. Update the vulnerable packages in package.json (root level) to their patched versions
+          2. Update packages/app/package.json if any vulnerable packages exist there
+          3. Update src/python/requirements.txt if any Python vulnerabilities exist
+          4. Run 'npm install' to regenerate the lockfile
+          5. Verify the app still starts correctly after updates
+          6. Check if there is already an open PR with '[pipeline]' in the title targeting master. If so, push your changes to that PR's branch instead of creating a new one.
+          7. If no such PR exists, create a new PR titled: '[pipeline] fix: resolve ${PKG_COUNT} critical security vulnerabilities'
+          8. In the PR description, list each vulnerability that was fixed with before/after versions
+          IMPORTANT: The PR title MUST start with '[pipeline]' to prevent triggering additional CI pipelines.
+          PROMPT_DELIM
+
+          ESCAPED_PROMPT=$(echo "$FIX_PROMPT" | jq -Rs .)
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://api.devin.ai/v1/sessions" \
+            -H "Authorization: Bearer ${DEVIN_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"prompt\": ${ESCAPED_PROMPT}
+            }")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            SESSION_URL=$(echo "$BODY" | jq -r '.url // empty')
+            echo "## Devin Remediation Session Created" >> "$GITHUB_STEP_SUMMARY"
+            echo "**$PKG_COUNT** vulnerable packages detected." >> "$GITHUB_STEP_SUMMARY"
+            echo "[View Devin Session]($SESSION_URL)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Failed to create Devin session (HTTP $HTTP_CODE)"
+            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+          fi
