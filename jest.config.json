@@ -1,0 +1,24 @@
+{
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.vue$": "vue-jest",
+    "^.+\\.tsx?$": "babel-jest",
+    "^.+\\.jsx?$": "babel-jest"
+  },
+  "moduleFileExtensions": ["js", "jsx", "ts", "tsx", "json", "vue"],
+  "collectCoverage": true,
+  "coverageDirectory": "coverage",
+  "collectCoverageFrom": [
+    "src/**/*.{js,ts,vue}",
+    "packages/app/src/**/*.js",
+    "!**/node_modules/**"
+  ],
+  "coverageThreshold": {
+    "global": {
+      "branches": 80,
+      "functions": 80,
+      "lines": 80,
+      "statements": 80
+    }
+  }
+}
