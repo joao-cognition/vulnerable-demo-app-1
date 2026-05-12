@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-const Vue = require("vue/dist/vue.common.js");
+import Vue from "vue/dist/vue.common.js";
 
 const RichTextComponent = {
   name: "RichText",

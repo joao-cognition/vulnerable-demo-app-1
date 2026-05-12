@@ -1,6 +1,6 @@
 jest.mock("@sentry/node", () => ({ init: jest.fn() }), { virtual: true });
 
-const { validateUserPermissions } = require("../sentry.js");
+import { validateUserPermissions } from "../sentry.js";
 
 describe("validateUserPermissions", () => {
   describe("no user provided", () => {

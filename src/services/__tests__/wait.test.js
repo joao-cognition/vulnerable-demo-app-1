@@ -1,7 +1,7 @@
 const mockFetch = jest.fn();
 jest.mock("node-fetch", () => mockFetch, { virtual: true });
 
-const { waitFor200, checkEndpoint, verifyEndpoint } = require("../wait.ts");
+import { waitFor200, checkEndpoint, verifyEndpoint } from "../wait.ts";
 
 describe("waitFor200", () => {
   beforeEach(() => {

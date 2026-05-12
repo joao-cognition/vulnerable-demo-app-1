@@ -1,6 +1,6 @@
 global.fetch = jest.fn().mockResolvedValue({ ok: true });
 
-const { makeApiCall } = require("../index.js");
+import { makeApiCall } from "../index.js";
 
 describe("packages/app/src/index.js — makeApiCall", () => {
   beforeEach(() => {
