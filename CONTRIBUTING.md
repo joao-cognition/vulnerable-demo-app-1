@@ -43,6 +43,38 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 Common types: `feat`, `fix`, `docs`, `ci`, `test`, `refactor`, `chore`.
 
+## Development Workflow
+
+### Running Locally
+
+```bash
+# Start with hot-reload
+npm run dev
+
+# Or run directly
+npm start
+```
+
+The Express server starts on port **3000**.
+
+### Testing
+
+Jest is included as a dev dependency. To run the test suite:
+
+```bash
+npm test
+```
+
+When adding new functionality, include corresponding unit tests. The project targets **80% code coverage** for core services in `src/services/`.
+
+### Linting
+
+The project uses ESLint. Check your code before committing:
+
+```bash
+npx eslint <files>
+```
+
 ## Pull Requests
 
 1. Push your branch and open a PR against `master`.
@@ -50,9 +82,17 @@ Common types: `feat`, `fix`, `docs`, `ci`, `test`, `refactor`, `chore`.
 3. Ensure CI checks pass before requesting review.
 4. PRs require at least one approving review before merging.
 
+### CI Pipelines on PRs
+
+When you open a PR against `master`, the following workflows run:
+
+- **Snyk Security Scan** -- scans dependencies for vulnerabilities.
+- **Documentation Update** -- triggers a Devin session to review docs (skipped for `[pipeline]` PRs).
+- **Test Coverage** -- triggers a Devin session to assess test coverage (skipped for `[pipeline]` PRs).
+
 ### Pipeline PRs
 
-PRs with `[pipeline]` in the title are created by automated Devin sessions and skip certain CI workflows to prevent recursive triggers. Do not add `[pipeline]` to manual PR titles unless you intend to bypass those workflows.
+PRs with `[pipeline]` in the title are created by automated Devin sessions and skip the Documentation Update and Test Coverage workflows to prevent recursive triggers. Do not add `[pipeline]` to manual PR titles unless you intend to bypass those workflows.
 
 ## Code Style
 

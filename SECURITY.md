@@ -40,7 +40,7 @@ Automated remediation PRs use a `[pipeline]` prefix in their title. All CI workf
 
 ## Dependency Update Policy
 
-- **Critical vulnerabilities**: Addressed automatically by the Snyk → Devin pipeline. Fixes are submitted as PRs for review.
+- **Critical vulnerabilities**: Addressed automatically by the Snyk -> Devin pipeline. Fixes are submitted as PRs for review.
 - **High vulnerabilities**: Included in automated remediation alongside critical issues.
 - **Medium and low vulnerabilities**: Reviewed periodically and updated during regular maintenance cycles.
 - **Dependency updates**: Non-security dependency updates are evaluated on a case-by-case basis.
@@ -49,14 +49,44 @@ Automated remediation PRs use a `[pipeline]` prefix in their title. All CI workf
 
 This repository includes deliberate security issues for demonstration, including but not limited to:
 
-- SQL injection via string concatenation (`src/python/accounts.py`)
-- Hardcoded credentials and JWT tokens (`packages/app/src/index.js`, `.env.example`)
-- Command injection via shell execution (`src/index.php`)
-- Outdated dependencies with known CVEs (`package.json`, `packages/app/package.json`)
-- Unencrypted database storage (`config/database.tf`)
-- Overly permissive IAM and network configurations (`config/`)
+### Application Code
 
-These are **not bugs** — they exist to exercise security scanning tools.
+| Category               | Location                        | Description                                           |
+| ---------------------- | ------------------------------- | ----------------------------------------------------- |
+| SQL injection          | `src/python/accounts.py`        | String concatenation in SQL queries                   |
+| Hardcoded JWT tokens   | `packages/app/src/index.js`     | Plaintext JWT embedded in source                      |
+| Hardcoded API key      | `packages/app/src/api.js`       | Long-lived JWT token used in API calls                |
+| Hardcoded credentials  | `.env.example`                  | Demo master password in example config                |
+| Hardcoded Pusher key   | `src/services/pusher.js`        | Pusher app key committed to source                    |
+| Command injection      | `src/index.php`                 | Shell execution via backtick operator (`stat`)        |
+| XSS via `v-html`       | `src/components/RichText.vue`   | Unsanitised HTML rendering in Vue component           |
+| Unreachable code       | `src/index.php`, `packages/app/src/index.js` | Dead code after return statements       |
+
+### Infrastructure
+
+| Category                   | Location                 | Description                                      |
+| -------------------------- | ------------------------ | ------------------------------------------------ |
+| Unencrypted DB storage     | `config/database.tf`     | `storage_encrypted = false` on RDS instance      |
+| No backup retention        | `config/database.tf`     | `backup_retention_period = 0`                    |
+| Overly permissive IAM      | `config/compute.tf`      | IAM role without scoped policy                   |
+| Hardcoded certificate ARN  | `config/load_balancer.tf`| ACM certificate ARN embedded in config           |
+
+### Mobile
+
+| Category             | Location                      | Description                              |
+| -------------------- | ----------------------------- | ---------------------------------------- |
+| Debuggable app       | `android/AndroidManifest.xml` | `android:debuggable="true"` in manifest  |
+| Exported activity    | `android/AndroidManifest.xml` | Intent filter with `exported="true"`     |
+
+### Dependencies
+
+| Category                | Location                         | Description                              |
+| ----------------------- | -------------------------------- | ---------------------------------------- |
+| Outdated npm packages   | `package.json`                   | Packages with known CVEs                 |
+| Vulnerable transitive   | `packages/app/package.json`      | `node-fetch@2.6.1` and other outdated deps |
+| Outdated Python package | `src/python/requirements.txt`    | Versions not pinned to latest patched    |
+
+These are **not bugs** -- they exist to exercise security scanning tools.
 
 ## Supported Versions
 
