@@ -39,6 +39,7 @@ All three CI pipelines use the `[pipeline]` PR title prefix to prevent recursive
 │       ├── api.js                # API call utilities
 │       └── index.js              # App entry point
 ├── src/
+│   ├── index.php                  # PHP file metadata utility
 │   ├── components/
 │   │   └── RichText.vue          # Vue rich text component
 │   ├── infra/
@@ -64,8 +65,10 @@ All three CI pipelines use the `[pipeline]` PR title prefix to prevent recursive
 |-------|-------------|
 | **Backend** | Node.js 18, Express 4.x |
 | **Frontend** | Vue 2.x, Bulma CSS |
+| **Other Languages** | Python 3 (PostgreSQL ops), PHP (file utils), C# (infra migration) |
 | **Database** | PostgreSQL (via psycopg2) |
-| **Infrastructure** | Terraform, Docker |
+| **Infrastructure** | Terraform (AWS), Docker |
+| **Mobile** | Android (demo manifest) |
 | **CI/CD** | GitHub Actions |
 | **Security** | Snyk, Devin AI auto-remediation |
 | **Monitoring** | Sentry |
@@ -127,6 +130,7 @@ Copy `.env.example` to `.env` and configure the following variables:
 | `PGDATABASE` | PostgreSQL database name | `testdb` |
 | `PGUSER` | PostgreSQL user | `testuser` |
 | `PGPASSWORD` | PostgreSQL password | `testpass` |
+| `MASTER_PASSWORD` | Application master password | — |
 
 ### CI/CD Secrets (GitHub Actions)
 

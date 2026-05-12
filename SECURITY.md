@@ -53,11 +53,16 @@ This is a **demonstration repository**. It intentionally contains vulnerable dep
 | `master` (latest) | Yes |
 | Older branches | No |
 
+## Demo Credentials Notice
+
+This repository **intentionally** contains hardcoded demo tokens and credentials (e.g. JWT tokens in `packages/app/src/`) as part of the vulnerability demonstration. These are **not real secrets** and exist solely to trigger security scanner findings. Do not use them in any real application.
+
 ## Security Best Practices
 
 When contributing to this repository, please follow these guidelines:
 
-- Do not commit secrets, API keys, or credentials to the repository.
+- Do not commit **real** secrets, API keys, or credentials to the repository.
 - Use environment variables for all sensitive configuration (see `.env.example`).
 - Keep dependencies up to date and review Snyk scan results on PRs.
 - Follow the principle of least privilege for any infrastructure configuration.
+- Review the Terraform configs in `config/` for infrastructure security best practices.

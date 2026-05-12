@@ -13,6 +13,7 @@ Thank you for your interest in contributing to this project! This document provi
 3. **Install dependencies:**
    ```bash
    npm install
+   pip install -r src/python/requirements.txt  # optional, for Python modules
    ```
 4. **Create a branch** for your changes:
    ```bash
@@ -29,6 +30,7 @@ Use the following prefixes for branch names:
 | `bugfix/` | Bug fixes |
 | `hotfix/` | Urgent production fixes |
 | `docs/` | Documentation changes |
+| `analysis/` | Research or investigation tasks |
 | `devin/` | Automated changes from Devin AI |
 
 ## Commit Messages
@@ -89,6 +91,16 @@ PRs with `[pipeline]` in the title are **automated** (created by Devin AI) and a
 - Review [SECURITY.md](SECURITY.md) for the security policy.
 - Do not introduce known vulnerable dependencies.
 - Check Snyk scan results on your PR before requesting review.
+
+## Testing
+
+The project uses [Jest](https://jestjs.io/) for JavaScript/TypeScript tests:
+
+```bash
+npm test
+```
+
+Please ensure all existing tests pass before submitting a PR.
 
 ## Questions?
 
