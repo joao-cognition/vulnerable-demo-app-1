@@ -1,0 +1,21 @@
+{
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.[jt]sx?$": "babel-jest"
+  },
+  "transformIgnorePatterns": ["/node_modules/(?!node-fetch)"],
+  "moduleFileExtensions": ["ts", "js", "json"],
+  "collectCoverage": true,
+  "coverageDirectory": "coverage",
+  "coverageReporters": ["text", "lcov", "clover"],
+  "collectCoverageFrom": [
+    "src/services/**/*.{js,ts}",
+    "packages/app/src/**/*.js",
+    "!**/node_modules/**",
+    "!**/__tests__/**"
+  ],
+  "testMatch": [
+    "**/__tests__/**/*.(spec|test).[jt]s",
+    "**/*.(spec|test).[jt]s"
+  ]
+}
