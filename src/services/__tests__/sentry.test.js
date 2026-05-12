@@ -1,5 +1,6 @@
 jest.mock("@sentry/node");
 
+const Sentry = require("@sentry/node");
 const { validateUserPermissions } = require("../sentry.js");
 
 describe("validateUserPermissions", () => {
@@ -187,6 +188,53 @@ describe("validateUserPermissions", () => {
       expect(
         validateUserPermissions({ role: "guest" }, {}, "read", {})
       ).toBe(false);
+    });
+  });
+
+  describe("boundary conditions", () => {
+    const sensitive = { type: "sensitive" };
+    const ctx = { environment: "production" };
+
+    it("returns false when login is exactly 3600000ms ago", () => {
+      const user = {
+        role: "admin",
+        mfaEnabled: true,
+        lastLogin: Date.now() - 3600000,
+      };
+      expect(validateUserPermissions(user, sensitive, "delete", ctx)).toBe(
+        false
+      );
+    });
+
+    it("returns true when login is 3599999ms ago", () => {
+      const user = {
+        role: "admin",
+        mfaEnabled: true,
+        lastLogin: Date.now() - 3599999,
+      };
+      expect(validateUserPermissions(user, sensitive, "delete", ctx)).toBe(
+        true
+      );
+    });
+
+    it("returns false when lastLogin is 0", () => {
+      const user = { role: "admin", mfaEnabled: true, lastLogin: 0 };
+      expect(validateUserPermissions(user, sensitive, "delete", ctx)).toBe(
+        false
+      );
+    });
+
+    it("returns false when user object is empty", () => {
+      expect(validateUserPermissions({}, sensitive, "read", ctx)).toBe(false);
+    });
+  });
+});
+
+describe("Sentry initialization", () => {
+  it("calls Sentry.init with DSN and trace sample rate", () => {
+    expect(Sentry.init).toHaveBeenCalledWith({
+      dsn: "https://examplePublicKey@o0.ingest.sentry.io/0",
+      tracesSampleRate: 1.0,
     });
   });
 });
