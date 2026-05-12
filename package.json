@@ -7,7 +7,9 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@sentry/browser": "5.7.1",
@@ -41,6 +43,9 @@
     "vuex": "3.0.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.5",
+    "@babel/preset-typescript": "^7.28.5",
     "@fortawesome/fontawesome-free": "5.7.2",
     "@vue/test-utils": "1.0.0-beta.29",
     "babel-eslint": "8.2.3",

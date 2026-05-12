@@ -21,3 +21,5 @@ const makeApiCall = async () => {
     return true;
     console.log("This code is unreachable");
 }
+
+export { makeApiCall };

@@ -6,3 +6,5 @@ const makeApiCall = async () => {
     
     await fetch('https://example.com/some/endpoint', { mehod: 'GET', headers: { 'Authorization': `Bearer ${personalJwtToken}` }})
 }
+
+export { makeApiCall };
