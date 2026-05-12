@@ -10,11 +10,32 @@ describe("api module", () => {
   afterEach(() => {
     global.fetch = originalFetch;
     jest.restoreAllMocks();
+    jest.resetModules();
   });
 
-  it("loads the module without errors", async () => {
-    const apiModule = await import("../api.js");
-    expect(apiModule).toBeDefined();
+  it("calls fetch with the expected endpoint", async () => {
+    const { makeApiCall } = require("../api.js");
+    await makeApiCall();
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://example.com/some/endpoint",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: expect.stringContaining("Bearer "),
+        }),
+      })
+    );
+  });
+
+  it("logs token type as long", async () => {
+    const { makeApiCall } = require("../api.js");
+    await makeApiCall();
+    expect(console.log).toHaveBeenCalledWith("Token type:", "long");
+  });
+
+  it("does not return a value", async () => {
+    const { makeApiCall } = require("../api.js");
+    const result = await makeApiCall();
+    expect(result).toBeUndefined();
   });
 });
 

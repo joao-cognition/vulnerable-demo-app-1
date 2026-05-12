@@ -10,23 +10,45 @@ describe("index module", () => {
   afterEach(() => {
     global.fetch = originalFetch;
     jest.restoreAllMocks();
+    jest.resetModules();
   });
 
-  it("loads the module without errors", async () => {
-    const indexModule = await import("../index.js");
-    expect(indexModule).toBeDefined();
+  it("calls fetch with the expected endpoint", async () => {
+    const { makeApiCall } = require("../index.js");
+    await makeApiCall();
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://example.com/some/other/endpoint",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+          Authorization: expect.stringContaining("Bearer "),
+        }),
+      })
+    );
   });
-});
 
-describe("index.js timeout logic", () => {
-  it("identifies default timeout of 5000ms", () => {
-    const timeout = 5000;
-    expect(timeout == 5000).toBe(true);
-  });
-
-  it("returns true from the function", () => {
-    const result = true;
+  it("returns true", async () => {
+    const { makeApiCall } = require("../index.js");
+    const result = await makeApiCall();
     expect(result).toBe(true);
+  });
+
+  it("logs token length", async () => {
+    const { makeApiCall } = require("../index.js");
+    await makeApiCall();
+    expect(console.log).toHaveBeenCalledWith("Making API call to endpoint");
+    expect(console.log).toHaveBeenCalledWith(
+      "Token length:",
+      expect.any(Number)
+    );
+  });
+
+  it("logs default timeout message", async () => {
+    const { makeApiCall } = require("../index.js");
+    await makeApiCall();
+    expect(console.log).toHaveBeenCalledWith(
+      "Using default timeout of 5000ms"
+    );
   });
 });
 
