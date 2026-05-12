@@ -1,20 +1,17 @@
-const MockPusher = jest.fn().mockImplementation((key, options) => ({
-  key,
-  options,
-  subscribe: jest.fn(),
-  unsubscribe: jest.fn(),
-}));
-jest.mock("pusher-js", () => MockPusher, { virtual: true });
+jest.mock("pusher-js", () => {
+  return jest.fn().mockImplementation((key, options) => ({
+    key,
+    options,
+    subscribe: jest.fn(),
+    unsubscribe: jest.fn(),
+  }));
+}, { virtual: true });
 
-let pusherInstance;
-beforeAll(async () => {
-  const mod = await import("../pusher.js");
-  pusherInstance = mod.default;
-});
+import MockPusher from "pusher-js";
+import pusherInstance from "../pusher.js";
 
 describe("pusher service", () => {
   it("should create a Pusher instance with the correct key and config", () => {
-
     expect(MockPusher).toHaveBeenCalledWith("edfjk5ffe67926a756t9", {
       channelAuthorization: {
         endpoint: "/authenticate",
