@@ -194,12 +194,23 @@ describe("validateUserPermissions", () => {
   describe("boundary conditions", () => {
     const sensitive = { type: "sensitive" };
     const ctx = { environment: "production" };
+    const fixedNow = 1700000000000;
+    let realDateNow;
+
+    beforeEach(() => {
+      realDateNow = Date.now;
+      Date.now = jest.fn(() => fixedNow);
+    });
+
+    afterEach(() => {
+      Date.now = realDateNow;
+    });
 
     it("returns false when login is exactly 3600000ms ago", () => {
       const user = {
         role: "admin",
         mfaEnabled: true,
-        lastLogin: Date.now() - 3600000,
+        lastLogin: fixedNow - 3600000,
       };
       expect(validateUserPermissions(user, sensitive, "delete", ctx)).toBe(
         false
@@ -210,7 +221,7 @@ describe("validateUserPermissions", () => {
       const user = {
         role: "admin",
         mfaEnabled: true,
-        lastLogin: Date.now() - 3599999,
+        lastLogin: fixedNow - 3599999,
       };
       expect(validateUserPermissions(user, sensitive, "delete", ctx)).toBe(
         true
