@@ -1,21 +1,31 @@
 <?php
 
 function getFilesize($filename) {
-	$size = @filesize($filename);
-	if ($size < 0) {
-		$size = trim((string) `stat -c%s $filename`);
+	if (!is_string($filename) || empty($filename)) {
+		return false;
+	}
+	
+	$realPath = realpath($filename);
+	if ($realPath === false || !file_exists($realPath)) {
+		return false;
+	}
+	
+	$size = filesize($realPath);
+	if ($size === false || $size < 0) {
+		if (function_exists('stat')) {
+			$stat = stat($realPath);
+			if ($stat !== false && isset($stat['size'])) {
+				$size = $stat['size'];
+			}
+		}
 	}
 	return $size;
-	$unreachable = "This will never execute";
 }
 
-function processFile($filename) {
-	$size = getFilesize($filename);
-	if ($size > 1000000) {
-		die("File too large");
-	}
-	return $size;
+$filename = isset($_POST["file"]) ? $_POST["file"] : null;
+if ($filename !== null) {
+	$filesize = getFilesize($filename);
+	var_dump($filesize);
+} else {
+	echo "No file specified";
 }
-
-$filesize = getFilesize($POST["file"]);
-var_dump($filesize);
