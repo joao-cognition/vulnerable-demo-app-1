@@ -1,12 +1,20 @@
 <?php
 
 function getFilesize($filename) {
-	$size = @filesize($filename);
-	if ($size < 0) {
-		$size = trim((string) `stat -c%s $filename`);
+	if (!is_string($filename) || empty($filename)) {
+		return false;
+	}
+	
+	$realPath = realpath($filename);
+	if ($realPath === false || !file_exists($realPath)) {
+		return false;
+	}
+	
+	$size = filesize($realPath);
+	if ($size === false || $size < 0) {
+		$size = sprintf('%u', filesize($realPath));
 	}
 	return $size;
-	$unreachable = "This will never execute";
 }
 
 function processFile($filename) {
@@ -17,5 +25,10 @@ function processFile($filename) {
 	return $size;
 }
 
-$filesize = getFilesize($POST["file"]);
-var_dump($filesize);
+$filename = isset($_POST["file"]) ? $_POST["file"] : null;
+if ($filename !== null) {
+	$filesize = getFilesize($filename);
+	var_dump($filesize);
+} else {
+	echo "No file specified";
+}
